@@ -21,6 +21,24 @@ const snakeBody = new Image();
 snakeBody.src = "./snakeBody.svg";
 
 window.onload = function () {
+  document.getElementById("start-btn").addEventListener("click", () => {
+    const nameInput = document.getElementById("player-name");
+    if (!nameInput.value.trim()) {
+      alert("Please enter your name!");
+      return;
+    }
+
+    playerName = nameInput.value.trim();
+    document.getElementById("player-display").textContent = playerName;
+
+    document.getElementById("start-screen").classList.add("hidden");
+    document.getElementById("game-container").classList.remove("hidden");
+
+    startGame();
+  });
+};
+
+function startGame() {
   playground = document.getElementById("playground");
   playground.width = cols * unitSize;
   playground.height = rows * unitSize;
@@ -28,7 +46,7 @@ window.onload = function () {
   document.addEventListener("keydown", changeDir);
   spawnFood();
   interval = setInterval(draw, 1000 / movesPerSec);
-};
+}
 
 let playerX = Math.floor(Math.random() * 10) * unitSize;
 let playerY = Math.floor(Math.random() * 10) * unitSize;
