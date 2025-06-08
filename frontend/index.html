@@ -1,22 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tank Game</title>
-  <style>
-    body {
-      margin: 0;
-      background-color: #1e1e1e;
-    }
-    canvas {
-      display: block;
-      margin: auto;
-    }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Snake Game</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <script src="main.js"></script>
+  <div class="game-container">
+    <h1>Snake Game</h1>
+    <div class="scoreboard">
+      Score: <span id="score">0</span>
+    </div>
+    <canvas id="playground"></canvas>
+    <div id="game-over" class="hidden">
+      <h2>💀 Game Over 💀</h2>
+      <button onclick="restartGame()">🔄 Try Again</button>
+    </div>
+  </div>
+  <script src="script.js"></script>
 </body>
 </html>
