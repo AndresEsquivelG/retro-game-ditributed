@@ -1,8 +1,8 @@
 export const snakeHeadImg = new Image();
-snakeHeadImg.src = "snake.svg";
+snakeHeadImg.src = "/frontend/assets/snake.svg";
 
 export const fruitImg = new Image();
-fruitImg.src = "fruit.svg";
+fruitImg.src = "/frontend/assets/fruit.svg";
 
 export const snakeBodyImg = new Image();
-snakeBodyImg.src = "snakeBody.svg";
+snakeBodyImg.src = "/frontend/assets/snakeBody.svg";
