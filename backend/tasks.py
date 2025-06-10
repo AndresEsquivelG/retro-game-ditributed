@@ -4,6 +4,7 @@ import time
 import socket
 import getpass
 import tempfile
+import random
 
 import psutil
 import requests
@@ -29,9 +30,14 @@ app.conf.task_default_routing_key = "images"
 
 # Map each task to its queue
 app.conf.task_routes = {
-    "tasks.send_metrics": {"queue": "metrics"},
+    # métricas e imagenes 
+    "tasks.send_metrics":           {"queue": "metrics"},
     "tasks.heavy_image_pipeline_s3": {"queue": "images"},
-    "tasks.blur_image_s3": {"queue": "images"},
+    "tasks.blur_image_s3":           {"queue": "images"},
+    # nueva lógica de Snake
+    "tasks.process_player_move": {"queue": "game", "routing_key": "game"},
+    "tasks.generate_food":        {"queue": "game", "routing_key": "game"},
+    "tasks.detect_collision":     {"queue": "game", "routing_key": "game"},
 }
 
 # Schedule send_metrics via Beat
@@ -42,6 +48,11 @@ app.conf.beat_schedule = {
         "options": {"queue": "metrics"},
     },
 }
+
+# Parámetros del tablero para Snake
+CELL_SIZE   = int(os.getenv("CELL_SIZE", 20))
+GRID_WIDTH  = int(os.getenv("GRID_WIDTH", 40))
+GRID_HEIGHT = int(os.getenv("GRID_HEIGHT", 30))
 
 # S3 client (MinIO)
 s3 = boto3.client(
@@ -249,3 +260,53 @@ def send_metrics():
         print("Metrics send error:", e)
 
     return "ok"
+
+@app.task
+def process_player_move(segments: list, direction: str) -> list:
+    """
+    Nodo 2: Avanza la serpiente un paso.
+    """
+    head = segments[0]
+    dx = dy = 0
+    if direction == "up":    dy = -CELL_SIZE
+    if direction == "down":  dy =  CELL_SIZE
+    if direction == "left":  dx = -CELL_SIZE
+    if direction == "right": dx =  CELL_SIZE
+
+    new_head = {"x": head["x"] + dx, "y": head["y"] + dy}
+    return [new_head] + segments[:-1]
+
+@app.task
+def generate_food(segments: list) -> dict:
+    """
+    Nodo 3: Genera una posición de comida aleatoria que no colida con la serpiente.
+    """
+    occupied = {(s["x"], s["y"]) for s in segments}
+    while True:
+        x = random.randint(0, GRID_WIDTH  - 1) * CELL_SIZE
+        y = random.randint(0, GRID_HEIGHT - 1) * CELL_SIZE
+        if (x, y) not in occupied:
+            return {"x": x, "y": y}
+
+@app.task
+def detect_collision(segments: list, food: dict) -> dict:
+    """
+    Nodo 4: Comprueba colisión con paredes, consigo misma y comida.
+    """
+    head = segments[0]
+    dead = False
+    ate  = False
+
+    # Colisión con paredes
+    if not (0 <= head["x"] < GRID_WIDTH * CELL_SIZE) or not (0 <= head["y"] < GRID_HEIGHT * CELL_SIZE):
+        dead = True
+
+    # Colisión con sí misma
+    if any(seg["x"] == head["x"] and seg["y"] == head["y"] for seg in segments[1:]):
+        dead = True
+
+    # Comer comida
+    if head["x"] == food["x"] and head["y"] == food["y"]:
+        ate = True
+
+    return {"dead": dead, "ate": ate}

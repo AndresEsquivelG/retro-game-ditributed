@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-import random
+from backend.tasks import process_player_move, generate_food, detect_collision
 
 load_dotenv()
 DB_URL  = os.getenv("DATABASE_URL")
@@ -48,6 +48,16 @@ task_status_log = Table(
 meta.create_all(engine)
 Session = sessionmaker(bind=engine)
 
+# FastAPI app and CORS configuration
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Pydantic model for receiving metrics
 class MetricsIn(BaseModel):
     hostname:     str
@@ -58,15 +68,17 @@ class MetricsIn(BaseModel):
     temperature:  float | None
     timestamp:    float
 
-# FastAPI app and CORS configuration
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class MoveIn(BaseModel):
+    segments:  list[dict]
+    direction: str
+
+class FoodIn(BaseModel):
+    segments: list[dict]
+
+class CollideIn(BaseModel):
+    segments: list[dict]
+    food:     dict
+
 
 # Endpoint for upserting into current_metrics
 @app.post("/metrics")
@@ -152,14 +164,36 @@ def read_logs(limit: int = 10):
         for h, t, d, ct in rows
     ]
 
-@app.get("/enemies")
-def get_enemies():
-    enemies = []
-    for i in range(5):  # 5 enemigos
-        enemies.append({
-            "id": i,
-            "x": random.randint(50, 750),
-            "y": random.randint(50, 550),
-            "angle": random.randint(0, 360)
-        })
-    return enemies
+# ————— Endpoints de Lógica Distribuida (Snake) —————
+@app.post("/next-move")
+def next_move(data: MoveIn):
+    """
+    Nodo 1: procesa movimiento de la serpiente via Celery (Nodo 2).
+    """
+    try:
+        segments = process_player_move.delay(data.segments, data.direction).get(timeout=1)
+        return {"segments": segments}
+    except Exception as e:
+        raise HTTPException(500, f"Error en process_player_move: {e}")
+
+@app.post("/generate-food")
+def new_food(data: FoodIn):
+    """
+    Nodo 1: genera nueva comida via Celery (Nodo 3).
+    """
+    try:
+        food = generate_food.delay(data.segments).get(timeout=1)
+        return food
+    except Exception as e:
+        raise HTTPException(500, f"Error en generate_food: {e}")
+
+@app.post("/check-collision")
+def check_collision(data: CollideIn):
+    """
+    Nodo 1: detecta colisiones via Celery (Nodo 4).
+    """
+    try:
+        outcome = detect_collision.delay(data.segments, data.food).get(timeout=1)
+        return outcome
+    except Exception as e:
+        raise HTTPException(500, f"Error en detect_collision: {e}")
