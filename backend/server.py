@@ -1,15 +1,19 @@
 import os
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import random
 from datetime import datetime
+import traceback
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+
 from sqlalchemy import (
     create_engine, Column, Float, String, DateTime,
     MetaData, Table, Boolean, Integer, select, desc
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 
 from backend.tasks import process_player_move, generate_food, detect_collision
 
@@ -52,7 +56,7 @@ Session = sessionmaker(bind=engine)
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,18 +71,28 @@ class MetricsIn(BaseModel):
     ram_percent:  float
     temperature:  float | None
     timestamp:    float
-
-class MoveIn(BaseModel):
+    
+class NextMoveIn(BaseModel):
     segments:  list[dict]
-    direction: str
+    direction: str = Field(..., pattern="^(up|down|left|right)$")
+
+class NextMoveOut(BaseModel):
+    segments: list[dict]
 
 class FoodIn(BaseModel):
     segments: list[dict]
+
+class FoodOut(BaseModel):
+    x: int
+    y: int
 
 class CollideIn(BaseModel):
     segments: list[dict]
     food:     dict
 
+class CollideOut(BaseModel):
+    dead: bool
+    ate:  bool
 
 # Endpoint for upserting into current_metrics
 @app.post("/metrics")
@@ -164,19 +178,22 @@ def read_logs(limit: int = 10):
         for h, t, d, ct in rows
     ]
 
-# ————— Endpoints de Lógica Distribuida (Snake) —————
-@app.post("/next-move")
-def next_move(data: MoveIn):
+# ————— Endpoints Snake distribuido —————
+
+@app.post("/next-move", response_model=NextMoveOut)
+def next_move(data: NextMoveIn):
     """
     Nodo 1: procesa movimiento de la serpiente via Celery (Nodo 2).
     """
     try:
-        segments = process_player_move.delay(data.segments, data.direction).get(timeout=1)
-        return {"segments": segments}
+        segs = process_player_move.delay(data.segments, data.direction).get(timeout=1)
+        return {"segments": segs}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(500, f"Error en process_player_move: {e}")
 
-@app.post("/generate-food")
+
+@app.post("/generate-food", response_model=FoodOut)
 def new_food(data: FoodIn):
     """
     Nodo 1: genera nueva comida via Celery (Nodo 3).
@@ -187,7 +204,8 @@ def new_food(data: FoodIn):
     except Exception as e:
         raise HTTPException(500, f"Error en generate_food: {e}")
 
-@app.post("/check-collision")
+
+@app.post("/check-collision", response_model=CollideOut)
 def check_collision(data: CollideIn):
     """
     Nodo 1: detecta colisiones via Celery (Nodo 4).

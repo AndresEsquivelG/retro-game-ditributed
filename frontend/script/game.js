@@ -1,5 +1,6 @@
 import { snakeHeadImg, fruitImg, snakeBodyImg } from './assets.js';
 import { initControls, getDirection } from './controls.js';
+import { getDirectionString } from './controls.js';
 import { spawnFood } from './utils.js';
 
 let playground, context;
@@ -19,49 +20,81 @@ export function startGame() {
   ({ x: foodX, y: foodY } = spawnFood(cols, rows, unitSize));
 
   initControls();
-  interval = setInterval(draw, 1000 / movesPerSec);
+  interval = setInterval(() => { draw(); }, 1000 / movesPerSec);
 }
 
-function draw() {
+async function draw() {
   if (gameOver) return;
 
-  context.fillStyle = "#222";
+  // limpia pantalla…
   context.fillRect(0, 0, playground.width, playground.height);
 
-  if (playerX === foodX && playerY === foodY) {
-    playerBody.push([foodX, foodY]);
-    ({ x: foodX, y: foodY } = spawnFood(cols, rows, unitSize));
+  // 1) Prepara segmentos como objetos
+  const segmentsIn = [
+    { x: playerX, y: playerY },
+    ...playerBody.map(([x,y]) => ({ x, y }))
+  ];
+  const direction = getDirectionString();
+
+  // 2) Llama a next-move
+  const segmentsOut = await fetchNextMove(segmentsIn, direction);
+  [playerX, playerY] = [segmentsOut[0].x, segmentsOut[0].y];
+  playerBody = segmentsOut.slice(1).map(o => [o.x, o.y]);
+
+  // 3) Colisión/comida
+  const collision = await fetchCollision(segmentsOut, { x: foodX, y: foodY });
+  if (collision.dead) { endGame(); return; }
+  if (collision.ate) {
     score++;
     document.getElementById("score").innerText = score;
+    const nf = await fetchFood(segmentsOut);
+    foodX = nf.x; foodY = nf.y;
+    playerBody.push([foodX, foodY]);
   }
 
-  for (let i = playerBody.length - 1; i > 0; i--) {
-    playerBody[i] = playerBody[i - 1];
-  }
-
-  if (playerBody.length) {
-    playerBody[0] = [playerX, playerY];
-  }
-
-  const { movementX, movementY } = getDirection();
-  playerX += movementX * unitSize;
-  playerY += movementY * unitSize;
-
-  context.drawImage(fruitImg, foodX, foodY, unitSize, unitSize);
-  context.drawImage(snakeHeadImg, playerX, playerY, unitSize, unitSize);
-
-  playerBody.forEach(([x, y]) => {
-    context.drawImage(snakeBodyImg, x, y, unitSize, unitSize);
-  });
-
-  if (
-    playerX < 0 || playerY < 0 ||
-    playerX >= cols * unitSize || playerY >= rows * unitSize ||
-    playerBody.some(([x, y]) => x === playerX && y === playerY)
-  ) {
-    endGame();
-  }
+  // 4) Dibujar imágenes
+  context.drawImage(fruitImg,    foodX,    foodY,    unitSize, unitSize);
+  context.drawImage(snakeHeadImg, playerX,  playerY,  unitSize, unitSize);
+  playerBody.forEach(([x,y]) =>
+    context.drawImage(snakeBodyImg, x, y, unitSize, unitSize)
+  );
 }
+
+
+// Llama a /next-move y devuelve el array de segmentos
+async function fetchNextMove(segments, direction) {
+  const res = await fetch("http://localhost:8000/next-move", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ segments, direction })
+  });
+  if (!res.ok) throw new Error("next-move error");
+  const data = await res.json();
+  return data.segments;
+}
+
+// Llama a /generate-food y devuelve { x, y }
+async function fetchFood(segments) {
+  const res = await fetch("http://localhost:8000/generate-food", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ segments })
+  });
+  if (!res.ok) throw new Error("generate-food error");
+  return await res.json();
+}
+
+// Llama a /check-collision y devuelve { dead, ate }
+async function fetchCollision(segments, food) {
+  const res = await fetch("http://localhost:8000/check-collision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ segments, food })
+  });
+  if (!res.ok) throw new Error("check-collision error");
+  return await res.json();
+}
+ 
 
 function endGame() {
   gameOver = true;

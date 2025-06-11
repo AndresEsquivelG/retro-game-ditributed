@@ -18,3 +18,11 @@ export function initControls() {
 export function getDirection() {
   return { movementX, movementY };
 }
+
+export function getDirectionString() {
+  if (movementX ===  1) return "right";
+  if (movementX === -1) return "left";
+  if (movementY ===  1) return "down";
+  if (movementY === -1) return "up";
+  return "right"; // valor por defecto
+}

@@ -20,8 +20,14 @@ from kombu import Queue
 load_dotenv()
 
 # Configure Celery
-app = Celery("distributed_blur", broker=os.getenv("BROKER_URL"))
+broker = os.getenv("BROKER_URL")
+backend = os.getenv("RESULT_BACKEND")
 
+app = Celery(
+    "distributed_game",
+    broker=broker,
+    backend=backend,           # <— aquí le indicás dónde guarda resultados
+)
 app.conf.task_queues = [
     Queue("images", routing_key="images", queue_arguments={"x-max-priority": 10})
 ]
