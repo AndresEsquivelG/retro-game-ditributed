@@ -45,12 +45,20 @@ async function draw() {
   const collision = await fetchCollision(segmentsOut, { x: foodX, y: foodY });
   if (collision.dead) { endGame(); return; }
   if (collision.ate) {
-    score++;
-    document.getElementById("score").innerText = score;
-    const nf = await fetchFood(segmentsOut);
-    foodX = nf.x; foodY = nf.y;
-    playerBody.push([foodX, foodY]);
+  score++;
+  document.getElementById("score").innerText = score;
+
+  // Duplicar último segmento del cuerpo (posición anterior)
+  if (playerBody.length > 0) {
+    const lastSegment = playerBody[playerBody.length - 1];
+    playerBody.push([...lastSegment]);
+  } else {
+    playerBody.push([playerX, playerY]);
   }
+
+  const nf = await fetchFood(segmentsOut);
+  foodX = nf.x; foodY = nf.y;
+}
 
   // 4) Dibujar imágenes
   context.drawImage(fruitImg,    foodX,    foodY,    unitSize, unitSize);

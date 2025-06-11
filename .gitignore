@@ -1,0 +1,14 @@
+venv/
+.env
+*.env
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de log
+*.log
+
+# Configuración de VSCode
+.vscode/

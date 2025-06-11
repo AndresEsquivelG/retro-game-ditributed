@@ -56,9 +56,9 @@ app.conf.beat_schedule = {
 }
 
 # Parámetros del tablero para Snake
-CELL_SIZE   = int(os.getenv("CELL_SIZE", 20))
-GRID_WIDTH  = int(os.getenv("GRID_WIDTH", 40))
-GRID_HEIGHT = int(os.getenv("GRID_HEIGHT", 30))
+CELL_SIZE   = 25
+GRID_WIDTH  = 17
+GRID_HEIGHT = 17
 
 # S3 client (MinIO)
 s3 = boto3.client(

@@ -49,7 +49,7 @@ task_status_log = Table(
 )
 
 # Create tables if they don't exist
-meta.create_all(engine)
+#meta.create_all(engine)
 Session = sessionmaker(bind=engine)
 
 # FastAPI app and CORS configuration
