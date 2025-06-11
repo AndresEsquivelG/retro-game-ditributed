@@ -94,58 +94,24 @@ class CollideOut(BaseModel):
     dead: bool
     ate:  bool
 
-# Endpoint for upserting into current_metrics
-@app.post("/metrics")
-def receive(m: MetricsIn):
-    s = Session()
-    try:
-        stmt = insert(current_metrics).values(
-            hostname     = m.hostname,
-            cpu_percent  = m.cpu_percent,
-            ram_total_mb = m.ram_total_mb,
-            ram_used_mb  = m.ram_used_mb,
-            ram_percent  = m.ram_percent,
-            temperature  = m.temperature,
-            timestamp    = datetime.fromtimestamp(m.timestamp)
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["hostname"],
-            set_={
-                "cpu_percent":  stmt.excluded.cpu_percent,
-                "ram_total_mb": stmt.excluded.ram_total_mb,
-                "ram_used_mb":  stmt.excluded.ram_used_mb,
-                "ram_percent":  stmt.excluded.ram_percent,
-                "temperature":  stmt.excluded.temperature,
-                "timestamp":    stmt.excluded.timestamp,
-            }
-        )
-        s.execute(stmt)
-        s.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        s.rollback()
-        raise HTTPException(500, str(e))
-    finally:
-        s.close()
+in_memory_metrics = {}
 
-# Returns the list of hosts with their current status
+@app.post("/metrics")
+def receive_metrics(m: MetricsIn):
+    in_memory_metrics[m.hostname] = {
+        "hostname":     m.hostname,
+        "cpu_percent":  m.cpu_percent,
+        "ram_total_mb": m.ram_total_mb,
+        "ram_used_mb":  m.ram_used_mb,
+        "ram_percent":  m.ram_percent,
+        "temperature":  m.temperature,
+        "timestamp":    datetime.fromtimestamp(m.timestamp).isoformat(),
+    }
+    return {"status": "ok"}
+
 @app.get("/metrics")
-def list_current_metrics():
-    s = Session()
-    rows = s.query(current_metrics).all()
-    s.close()
-    return [
-        {
-            "hostname":     r.hostname,
-            "cpu_percent":  r.cpu_percent,
-            "ram_total_mb": r.ram_total_mb,
-            "ram_used_mb":  r.ram_used_mb,
-            "ram_percent":  r.ram_percent,
-            "temperature":  r.temperature,
-            "timestamp":    r.timestamp.isoformat(),
-        }
-        for r in rows
-    ]
+def list_metrics():
+    return list(in_memory_metrics.values())
 
 # Endpoint to retrieve heavy tasks logs
 @app.get("/logs")
@@ -186,7 +152,10 @@ def next_move(data: NextMoveIn):
     Nodo 1: procesa movimiento de la serpiente via Celery (Nodo 2).
     """
     try:
-        segs = process_player_move.delay(data.segments, data.direction).get(timeout=1)
+        segs = process_player_move.apply_async(
+            args=[data.segments, data.direction],
+            queue="movement"
+        ).get(timeout=1)
         return {"segments": segs}
     except Exception as e:
         traceback.print_exc()
@@ -199,11 +168,13 @@ def new_food(data: FoodIn):
     Nodo 1: genera nueva comida via Celery (Nodo 3).
     """
     try:
-        food = generate_food.delay(data.segments).get(timeout=1)
+        food = generate_food.apply_async(
+            args=[data.segments],
+            queue="food"
+        ).get(timeout=1)
         return food
     except Exception as e:
         raise HTTPException(500, f"Error en generate_food: {e}")
-
 
 @app.post("/check-collision", response_model=CollideOut)
 def check_collision(data: CollideIn):
@@ -211,7 +182,10 @@ def check_collision(data: CollideIn):
     Nodo 1: detecta colisiones via Celery (Nodo 4).
     """
     try:
-        outcome = detect_collision.delay(data.segments, data.food).get(timeout=1)
+        outcome = detect_collision.apply_async(
+            args=[data.segments, data.food],
+            queue="collisions"
+        ).get(timeout=1)
         return outcome
     except Exception as e:
         raise HTTPException(500, f"Error en detect_collision: {e}")

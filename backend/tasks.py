@@ -34,17 +34,18 @@ app.conf.task_queues = [
 app.conf.task_default_queue = "images"
 app.conf.task_default_routing_key = "images"
 
-# Map each task to its queue
 app.conf.task_routes = {
-    # métricas e imagenes 
-    "tasks.send_metrics":           {"queue": "metrics"},
+    # Monitor y procesamiento de imágenes pesadas
+    "tasks.send_metrics":            {"queue": "metrics"},
     "tasks.heavy_image_pipeline_s3": {"queue": "images"},
     "tasks.blur_image_s3":           {"queue": "images"},
-    # nueva lógica de Snake
-    "tasks.process_player_move": {"queue": "game", "routing_key": "game"},
-    "tasks.generate_food":        {"queue": "game", "routing_key": "game"},
-    "tasks.detect_collision":     {"queue": "game", "routing_key": "game"},
+
+    # Snake – separadas por lógica
+    "tasks.process_player_move": {"queue": "movement"},
+    "tasks.generate_food":       {"queue": "food"},
+    "tasks.detect_collision":    {"queue": "collisions"},
 }
+
 
 # Schedule send_metrics via Beat
 app.conf.beat_schedule = {
